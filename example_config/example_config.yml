@@ -1,0 +1,12 @@
+search:
+  common:
+    - toronto
+  terms:
+    - restaurants
+    - sports
+    - city council
+    - doug ford
+  pages: 30
+proxy:
+  aws:
+    count: 40

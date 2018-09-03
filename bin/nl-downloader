@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+#
+# Script for retrieving GoogleNews search results
+
+import argparse
+from datetime import datetime
+import logging
+import queue
+import threading
+
+import yaml
+
+from newslister import worker, search_queries
+from newslister.proxy import factory
+from newslister.work import GoogleNewsItem
+from newslister.limiter import Limiter
+from newslister.output import init_output_dir
+
+
+def load_config(filepath):
+    '''Load the config from filepath into a dictionary'''
+    with open(filepath, 'r') as f:
+        config = yaml.load(f.read())
+    return config
+
+
+def initialize_logging(output_dir):
+    fh = logging.FileHandler(f'{output_dir}/log.txt')
+    logging.getLogger('boto3').setLevel(logging.CRITICAL)
+    logging.getLogger('botocore').setLevel(logging.CRITICAL)
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger().addHandler(fh)
+
+
+def initialize_args():
+    description = 'Download Google News search results for a set of queries'
+    epilog = 'Example  : nl-downloader --config=config_foo.yml --output-dir=runs'
+    parser = argparse.ArgumentParser(description=description, epilog=epilog)
+    parser.add_argument(
+        '--config',
+        '-c',
+        required=True,
+        type=str,
+        help='Location of configuration file')
+    parser.add_argument(
+        '--output-dir',
+        '-o',
+        default=str(datetime.today()),
+        type=str,
+        help='Output directory for scraping results')
+    return parser.parse_args()
+
+
+def initialize_proxies(proxy_config):
+    """Create a list of proxypools from different providers"""
+    pools = []
+    for cloud, config in proxy_config.items():
+        count = config['count']
+        logging.info('Creating %s proxies on %s', count, cloud)
+        proxy_pool = factory(cloud, count)
+        logging.info('Finished creating %s proxies on %s', count, cloud)
+        pools.append(proxy_pool)
+    return pools
+
+
+def item_queue(common, terms, pages, output_dir):
+    q = queue.Queue()
+    for query in search_queries(common, terms):
+        for page in range(pages):
+            q.put(GoogleNewsItem(query, page))
+    return q
+
+def main():
+    args = initialize_args()
+    config = load_config(args.config)
+    search = config['search']
+    common = search['common']
+    terms = search['terms']
+    pages = search['pages']
+    proxy_config = config['proxy']
+    output_dir = args.output_dir
+
+    init_output_dir(output_dir, search_queries(common, terms))
+    initialize_logging(output_dir)
+    logging.info('Initializing job queue')
+    job_queue = item_queue(common, terms, pages, output_dir)
+    logging.info('Initializing proxy queue')
+    proxy_pools = initialize_proxies(proxy_config)
+    logging.info('Queues initialized')
+
+    # Workers/scrapers
+    limiter = Limiter()
+    threads = []
+    for pool in proxy_pools:
+        for _ in range(len(pool)):
+            w = worker.Worker(job_queue, pool, output_dir, limiter)
+            t = threading.Thread(target=w.work)
+            t.start()
+            threads.append(t)
+    job_queue.join()
+    logging.info('Workers finished!')
+    for t in range(len(threads)):
+        job_queue.put(None)
+    for t in threads:
+        t.join()
+
+    logging.info('Terminating proxies!')
+    for group in proxy_pools:
+        group.destroy()
+
+if __name__ == '__main__':
+    main()

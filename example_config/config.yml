@@ -1,0 +1,38 @@
+search:
+  common:
+    - cryptocurrency
+  terms:
+    - economics
+    - bitcoin
+    - ethereum
+    - goldman sachs
+    - bank of america
+    - bat
+    - celo
+    - litecoin
+    - ripple
+    - dash
+    - zcash
+    - monero
+    - argentina
+    - china
+    - singapore
+    - real estate
+    - reddit
+    - brave
+    - venezeula
+    - san francisco
+    - porn
+    - gambling
+    - malta
+    - lithuania
+    - toronto
+    - silicon valley
+    - medicine
+    - housing
+  pages: 5
+proxy:
+  aws:
+    count: 50
+    labels:
+      project_name: newslister

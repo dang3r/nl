@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+
+import boto3
+
+from newslister.proxy.aws import ec2_regions, destroy_instances
+
+def main():
+    print('Destroying instances...')
+    session = boto3.session.Session()
+    for region in ec2_regions:
+        size = destroy_instances(session, region)
+        print(f'{size} instances killed in {region}')
+
+if __name__ == '__main__':
+    main()

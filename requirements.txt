@@ -1,0 +1,7 @@
+boto3
+bs4
+requests
+pylint
+pytest
+pyaml
+requests[socks]

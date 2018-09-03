@@ -1,0 +1,19 @@
+search:
+  common:
+    - nhl
+    - hockey
+  terms:
+    - toronto maple leafs
+    - st.louis blues
+    - new york islanders
+    - montreal canadiens
+    - pitsburgh penguins
+    - flordia panthers
+    - san jose sharks
+    - los angeles kings
+    - calgary flames
+    - edmonton oilers
+  pages: 20
+proxy:
+  aws:
+    count: 60

@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+
+import argparse
+import csv
+import logging
+
+from newslister import parser
+
+def initialize_args():
+    arg_parser = argparse.ArgumentParser(description='''Create an aggregation
+        spreadsheet of Google News search results''')
+    arg_parser.add_argument(
+        '--run-dir',
+        '-r',
+        type=str,
+        required=True,
+        help='Import directory to read Google results from'
+    )
+    arg_parser.add_argument(
+        '--csv',
+        '-c',
+        type=str,
+        default='out.csv',
+        help='Csv file to output the spreadsheet to'
+    )
+    args = arg_parser.parse_args()
+    return args
+
+
+def main():
+    logging.basicConfig(level=logging.INFO)
+    args = initialize_args()
+    run_dir = args.run_dir
+    print(run_dir)
+    results = parser.import_results(run_dir)
+    collection = parser.RowCollection()
+    for result in results:
+        collection.add_result(result)
+    logging.info('Found %s results', len(results))
+
+    with open(args.csv, 'w') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',', quoting=csv.QUOTE_ALL)
+        writer.writerow(parser.RowCollection.HEADERS)
+        for row in collection:
+            writer.writerow(row.fields())
+
+    logging.info('Results written to %s', args.csv)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+
+from string import Template
+
+user_data = '''Content-Type: multipart/mixed; boundary="//"
+MIME-Version: 1.0
+
+--//
+Content-Type: text/cloud-config; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="cloud-config.txt"
+
+#cloud-config
+cloud_final_modules:
+ - rightscale_userdata
+ - scripts-per-once
+ - scripts-per-boot
+ - scripts-per-instance
+ - [scripts-user, always]
+ - keys-to-console
+ - phone-home
+ - final-message
+--//
+Content-Type: text/x-shellscript; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="userdata.txt"
+
+#!/bin/bash
+
+sudo yum install -y docker
+sudo usermod -a -G docker ec2-user
+sudo curl -L https://github.com/docker/compose/releases/download/1.22.0/docker-compose-`uname -s`-`uname -m` | sudo tee /usr/local/bin/docker-compose > /dev/null
+sudo chmod +x /usr/local/bin/docker-compose
+sudo service docker start
+sudo chkconfig docker on
+
+sudo cat <<EOF > /etc/docker-compose.yml
+version: "3.3"
+services:
+    proxy:
+        image: xkuma/socks5:latest
+        ports:
+            - "1080:1080"
+        environment:
+            - "PROXY_USER=foo"
+            - "PROXY_PASSWORD=bar"
+            - "PROXY_SERVER=0.0.0.0:1080"
+EOF
+sudo /usr/local/bin/docker-compose -f /etc/docker-compose.yml up -d
+--// '''
+
+region_tmpl = Template("""# --- aws resources for region $region ---
+
+provider "aws" {
+    region = "$region"
+    alias  = "$region"
+}
+
+resource "aws_security_group" "sg_$region" {
+    provider = "aws.$region"
+    name = "$project-$region-sg"
+    description = "Allow incoming socks5 proxy traffic"
+
+    ingress {
+        from_port = 1080
+        to_port = 1080
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    egress {
+        from_port = 0
+        to_port = 0
+        protocol = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+}
+
+resource "aws_instance" "ec2_$region" {
+  provider = "aws.$region"
+
+  count = "$${var.counts["$region"]}"
+  ami = "$ami"
+  instance_type="t2.nano"
+  associate_public_ip_address = true
+  vpc_security_group_ids=["$${aws_security_group.sg_$region.id}"]
+  user_data="$${var.user_data}"
+
+  tags {
+    Name = "newslister.$region"
+    Project = "newslister"
+  }
+}""")
+
+region_to_amis = {
+    'ap-northeast-1': 'ami-0cf78ae724f63bac0',
+    'ap-northeast-2': 'ami-08cfa02141f9e9bee',
+    'ap-south-1': 'ami-0aba92643213491b9',
+    'ap-southeast-1': 'ami-0cf24653bcf894797',
+    'ap-southeast-2': 'ami-00c1445796bc0a29f',
+    'ca-central-1': 'ami-b61b96d2',
+    'eu-central-1': 'ami-06465d49ba60cf770',
+    'eu-west-1': 'ami-0ea87e2bfa81ca08a',
+    'eu-west-2': 'ami-e6768381',
+    'eu-west-3': 'ami-0050bb60cea70c5b3',
+    'sa-east-1': 'ami-09c013530239687aa',
+    'us-east-1': 'ami-0422d936d535c63b1',
+    'us-east-2': 'ami-0f9c61b5a562a16af',
+    'us-west-2': 'ami-40d1f038',
+    'us-west-1': 'ami-0d4027d2cdbca669d',
+}
+
+var_tmpl = '''variable "counts" {
+  type = "map"
+  default = {'''
+
+def generate_main():
+    for region, ami in region_to_amis.items():
+        print(region_tmpl.substitute({'project': 'newslister', 'region': region, 'ami': ami}))
+
+def generate_variables():
+    var = var_tmpl
+    for region, _ in region_to_amis.items():
+        var += f'"{region}" = "0"\n'
+    var += '}\n}'
+    print(var)
+    print(f'''variable "user_data" {{
+default = <<IN
+{user_data}
+IN
+}}''')
+
+
+if __name__ == '__main__':
+    generate_main()
+    generate_variables()
