@@ -68,4 +68,4 @@ optional arguments:
 
 ## Licensing
 
-TBD.
+MIT
